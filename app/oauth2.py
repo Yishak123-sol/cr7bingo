@@ -4,6 +4,8 @@ from sqlalchemy.orm import Session
 import jwt
 from app import schemas, database, models
 from fastapi.security import OAuth2PasswordBearer
+from bson import ObjectId
+from app.database import get_db
 
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
@@ -31,9 +33,9 @@ def verify_token(token: str, credentials_exception):
     return token_data
 
 
-def get_current_user(
+async def get_current_user(
     token: str = Depends(oauth2_scheme),
-    db: Session = Depends(database.get_db),
+    db: Session = Depends(get_db),
 ):
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
@@ -41,8 +43,7 @@ def get_current_user(
         headers={"WWW-Authenticate": "Bearer"},
     )
     token_data = verify_token(token, credentials_exception)
-    user = db.query(models.User).filter(models.User.id == int(token_data.id)).first()
-    if user is None:
+    user = await db[models.USERS_COLLECTION].find_one({"_id": ObjectId(token_data.id)})
+    if not user:
         raise credentials_exception
-
     return user

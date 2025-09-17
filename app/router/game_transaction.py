@@ -1,63 +1,64 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from .. import models, oauth2, schemas
-from sqlalchemy.orm import Session
+from motor.motor_asyncio import AsyncIOMotorDatabase
 from .. import database, models
+from app.database import get_db
+from bson import ObjectId
 
 router = APIRouter(tags=["Game Transaction"], prefix="/gamet")
 
 
 @router.post("/", status_code=status.HTTP_201_CREATED)
-def create_game_transaction(
+@router.post("/", status_code=status.HTTP_201_CREATED)
+async def create_game_transaction(
     game_transaction: schemas.GameTransactionModel,
-    db: Session = Depends(database.get_db),
-    current_user: int = Depends(oauth2.get_current_user),
+    db: AsyncIOMotorDatabase = Depends(get_db),
+    current_user: dict = Depends(oauth2.get_current_user),
 ):
-
     if not current_user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail=f"Could not validate credentials",
             headers={"WWW-Authenticate": "Bearer"},
         )
-
-    remain_balance = (
-        db.query(models.User)
-        .filter(models.User.id == current_user.id)
-        .first()
-        .remaining_balance
+    user = await db[models.USERS_COLLECTION].find_one(
+        {"_id": ObjectId(current_user["_id"])}
     )
-
+    remain_balance = user["remaining_balance"]
     if remain_balance < game_transaction.dedacted_amount:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"You don't have enough balance to place this bet",
         )
-    db_user = db.query(models.User).filter(models.User.id == current_user.id).first()
-    db_user.remaining_balance = remain_balance - game_transaction.dedacted_amount
-
-    db.commit()
-    db.refresh(db_user)
-    new_game_transaction = models.GameTransaction(
-        remaining_balance=remain_balance - game_transaction.dedacted_amount,
-        total_balance=current_user.total_balance,
-        owner_id=current_user.id,
-        owner_name=current_user.name,
-        **game_transaction.dict(),
+    await db[models.USERS_COLLECTION].update_one(
+        {"_id": ObjectId(current_user["_id"])},
+        {
+            "$set": {
+                "remaining_balance": remain_balance - game_transaction.dedacted_amount
+            }
+        },
     )
-    db.add(new_game_transaction)
-    db.commit()
-    db.refresh(new_game_transaction)
-
+    new_game_transaction = game_transaction.dict()
+    new_game_transaction["remaining_balance"] = (
+        remain_balance - game_transaction.dedacted_amount
+    )
+    new_game_transaction["total_balance"] = user["total_balance"]
+    new_game_transaction["owner_id"] = str(current_user["_id"])
+    new_game_transaction["owner_name"] = user["name"]
+    result = await db[models.GAME_TRANSACTIONS_COLLECTION].insert_one(
+        new_game_transaction
+    )
     return {
         "message": "Game Transaction Created Successfully",
-        "game_transaction": new_game_transaction,
+        "game_transaction": str(result.inserted_id),
     }
 
 
 @router.get("/")
-def get_game_transactions(
-    db: Session = Depends(database.get_db),
-    current_user: int = Depends(oauth2.get_current_user),
+@router.get("/")
+async def get_game_transactions(
+    db: AsyncIOMotorDatabase = Depends(get_db),
+    current_user: dict = Depends(oauth2.get_current_user),
 ):
     if not current_user:
         raise HTTPException(
@@ -65,85 +66,75 @@ def get_game_transactions(
             detail=f"Could not validate credentials",
             headers={"WWW-Authenticate": "Bearer"},
         )
-
-    if current_user.role.value != "owner":
+    if current_user["role"] != "owner":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=f"you do not have permission to access this data",
         )
-
-    game_transaction = db.query(models.GameTransaction).all()
+    cursor = db[models.GAME_TRANSACTIONS_COLLECTION].find({})
+    game_transaction = await cursor.to_list(length=100)
     if not game_transaction:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="No game transaction found",
         )
-
     return game_transaction
 
 
 @router.get("/my/{id}")
-def get_game_transaction_by_userid(
-    id: int,
-    db: Session = Depends(database.get_db),
-    current_user: int = Depends(oauth2.get_current_user),
+@router.get("/my/{id}")
+async def get_game_transaction_by_userid(
+    id: str,
+    db: AsyncIOMotorDatabase = Depends(get_db),
+    current_user: dict = Depends(oauth2.get_current_user),
 ):
-
     if not current_user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail=f"Could not validate credentials",
             headers={"WWW-Authenticate": "Bearer"},
         )
-
-    user = db.query(models.User).filter(models.User.id == id).first()
+    user = await db[models.USERS_COLLECTION].find_one({"_id": ObjectId(id)})
     if not user:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="User not found",
         )
-
-    game_transaction = db.query(models.GameTransaction).all()
+    cursor = db[models.GAME_TRANSACTIONS_COLLECTION].find({})
+    game_transaction = await cursor.to_list(length=100)
     if not game_transaction:
         raise HTTPException(status_code=404, detail="There is no game transaction yet.")
-
-    if user.role.value == "owner":
+    if user["role"] == "owner":
         return game_transaction
-
-    game_transactions = (
-        db.query(models.GameTransaction)
-        .filter(models.GameTransaction.owner_id == id)
-        .all()
+    user_transactions_cursor = db[models.GAME_TRANSACTIONS_COLLECTION].find(
+        {"owner_id": id}
     )
-    if not game_transactions:
+    user_transactions = await user_transactions_cursor.to_list(length=100)
+    if not user_transactions:
         raise HTTPException(
             status_code=404, detail="you don't have a game transaction yet."
         )
-
-    return game_transactions
+    return user_transactions
 
 
 @router.get("/my-game-transaction")
-def get_game_transaction_by_userid(
-    db: Session = Depends(database.get_db),
-    current_user: int = Depends(oauth2.get_current_user),
+@router.get("/my-game-transaction")
+async def get_game_transaction_by_userid(
+    db: AsyncIOMotorDatabase = Depends(get_db),
+    current_user: dict = Depends(oauth2.get_current_user),
 ):
-
     if not current_user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail=f"Could not validate credentials",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    print(current_user)
-    game_transaction = (
-        db.query(models.GameTransaction)
-        .filter(models.GameTransaction.owner_id == current_user.id)
-        .all()
+    user_transactions_cursor = db[models.GAME_TRANSACTIONS_COLLECTION].find(
+        {"owner_id": str(current_user["_id"])}
     )
+    game_transaction = await user_transactions_cursor.to_list(length=100)
     if not game_transaction:
         raise HTTPException(
             status_code=404, detail="you don't have a game transaction yet."
         )
-
     return game_transaction

@@ -90,14 +90,14 @@ class UserOut(BaseModel):
     region: Optional[str] = None
     remaining_balance: Optional[float] = None
     profile_picture: Optional[str] = None
-    parent_id: Optional[int] = None
-    id: int
+    parent_id: Optional[str] = None
+    id: str
     name: Optional[str] = None
     city: Optional[str] = None
     role: str
     total_balance: Optional[float] = None
-    created_by: Optional[int] = None
-    created_at: datetime
+    created_by: Optional[str] = None
+    created_at: Optional[datetime] = None
     bingo_card_code: Optional[str] = None
 
     class Config:
@@ -116,7 +116,7 @@ class UserLogin(BaseModel):
 
 
 class TokenData(BaseModel):
-    id: Optional[int] = None
+    id: Optional[str] = None
 
 
 class UserCreate(BaseModel):
@@ -128,4 +128,4 @@ class UserCreate(BaseModel):
     region: Optional[str] = None
     password: str
     profile_picture: Optional[str] = None
-    parent_id: Optional[int] = None
+    parent_id: Optional[str] = None
