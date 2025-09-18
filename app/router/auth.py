@@ -11,7 +11,6 @@ router = APIRouter(tags=["Authentication"])
 
 
 @router.post("/login", status_code=status.HTTP_201_CREATED)
-@router.post("/login", status_code=status.HTTP_201_CREATED)
 async def login(
     user_credentials: OAuth2PasswordRequestForm = Depends(),
     db: AsyncIOMotorDatabase = Depends(get_db),
