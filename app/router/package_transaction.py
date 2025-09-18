@@ -1,3 +1,5 @@
+# Set remaining_balance to zero for a user
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from .. import models, oauth2, schemas
 
@@ -103,84 +105,6 @@ async def create_package_transaction(
     }
 
 
-# @router.post("/owner/{given_receiver_id}", status_code=status.HTTP_201_CREATED)
-# def create_package_transaction(
-#     given_receiver_id: int,
-#     package_transaction: schemas.PackageTransactionModel,
-#     db: Session = Depends(database.get_db),
-#     current_user: int = Depends(oauth2.get_current_user),
-# ):
-
-#     if not current_user:
-#         raise HTTPException(
-#             status_code=status.HTTP_401_UNAUTHORIZED,
-#             detail=f"Could not validate credentials",
-#             headers={"WWW-Authenticate": "Bearer"},
-#         )
-
-#     receiver_user = (
-#         db.query(models.User).filter(models.User.id == given_receiver_id).first()
-#     )
-#     if not receiver_user:
-#         raise HTTPException(
-#             status_code=status.HTTP_404_NOT_FOUND,
-#             detail=f"Receiver user not found",
-#         )
-
-#     if current_user.role.value != "owner":
-#         raise HTTPException(
-#             status_code=status.HTTP_403_FORBIDDEN,
-#             detail=f"This user role does not have permission to transfer pakcage",
-#         )
-
-#     if current_user.id == given_receiver_id:
-#         raise HTTPException(
-#             status_code=status.HTTP_403_FORBIDDEN,
-#             detail=f"You cannot transfer to yourself",
-#         )
-
-#     sender_name = (
-#         db.query(models.User).filter(models.User.id == current_user.id).first().name
-#     )
-#     receiver_name = (
-#         db.query(models.User).filter(models.User.id == given_receiver_id).first().name
-#     )
-
-#     updated_receiver_package_amount = (
-#         db.query(models.User)
-#         .filter(models.User.id == given_receiver_id)
-#         .first()
-#         .remaining_balance
-#         + package_transaction.package_amount
-#     )
-
-#     db.query(models.User).filter(models.User.id == given_receiver_id).update(
-#         {
-#             "remaining_balance": updated_receiver_package_amount,
-#         }
-#     )
-#     db.commit()
-
-#     new_package_transaction = models.PackageTransaction(
-#         receiver_id=given_receiver_id,
-#         sender_id=current_user.id,
-#         receiver_name=receiver_name,
-#         sender_name=sender_name,
-#         **package_transaction.dict(),
-#     )
-
-#     # update user total and remaining balance
-#     db.add(new_package_transaction)
-#     db.commit()
-#     db.refresh(new_package_transaction)
-
-#     return {
-#         "message": "Pakcage Transaction Created Successfully",
-#         "package_transaction": new_package_transaction,
-#     }
-
-
-@router.get("/")
 @router.get("/")
 async def get_package_transactions(
     db: AsyncIOMotorDatabase = Depends(get_db),
@@ -208,7 +132,6 @@ async def get_package_transactions(
 
 
 @router.get("/my-package-transaction")
-@router.get("/my-package-transaction")
 async def get_package_transaction_by_userid(
     db: AsyncIOMotorDatabase = Depends(get_db),
     current_user: dict = Depends(oauth2.get_current_user),
@@ -235,7 +158,6 @@ async def get_package_transaction_by_userid(
     return package_transaction
 
 
-@router.get("/my/{id}")
 @router.get("/my/{id}")
 async def get_package_transaction_by_userid(
     id: str,
@@ -287,9 +209,35 @@ async def update_remaining_balance(
         raise HTTPException(status_code=404, detail="User not found")
 
     await db[models.USERS_COLLECTION].update_one(
-        {"_id": ObjectId(user_id)}, {"$set": {"remaining_balance": amount}}
+        {"_id": ObjectId(user_id)}, {"$inc": {"remaining_balance": amount}}
+    )
+    updated_user = await db[models.USERS_COLLECTION].find_one(
+        {"_id": ObjectId(user_id)}
     )
     return {
         "message": "Balance updated",
-        "remaining_balance": amount,
+        "remaining_balance": (
+            updated_user["remaining_balance"] if updated_user else None
+        ),
+    }
+
+
+@router.post("/update_remaining_balance/{user_id}")
+async def update_remaining_balance(
+    user_id: str,
+    db: AsyncIOMotorDatabase = Depends(get_db),
+    current_user: dict = Depends(oauth2.get_current_user),
+):
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    user = await db[models.USERS_COLLECTION].find_one({"_id": ObjectId(user_id)})
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    await db[models.USERS_COLLECTION].update_one(
+        {"_id": ObjectId(user_id)}, {"$set": {"remaining_balance": 0}}
+    )
+    return {
+        "message": "Balance updated",
+        "remaining_balance": 0,
     }
