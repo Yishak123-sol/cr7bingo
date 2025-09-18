@@ -226,10 +226,8 @@ async def update_remaining_balance(
 async def update_remaining_balance(
     user_id: str,
     db: AsyncIOMotorDatabase = Depends(get_db),
-    current_user: dict = Depends(oauth2.get_current_user),
 ):
-    if not current_user:
-        raise HTTPException(status_code=401, detail="Not authenticated")
+
     user = await db[models.USERS_COLLECTION].find_one({"_id": ObjectId(user_id)})
     if not user:
         raise HTTPException(status_code=404, detail="User not found")

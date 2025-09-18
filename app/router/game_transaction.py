@@ -9,7 +9,6 @@ router = APIRouter(tags=["Game Transaction"], prefix="/gamet")
 
 
 @router.post("/", status_code=status.HTTP_201_CREATED)
-@router.post("/", status_code=status.HTTP_201_CREATED)
 async def create_game_transaction(
     game_transaction: schemas.GameTransactionModel,
     db: AsyncIOMotorDatabase = Depends(get_db),
