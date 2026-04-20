@@ -1,6 +1,7 @@
-from app.database import engine, Base
-from app import models
+"""
+Deprecated: this project uses MongoDB, not SQLAlchemy.
+Use: python seed_dummy_data.py
+"""
 
-# Create all tables
-Base.metadata.create_all(bind=engine)
-print("Database tables created successfully!")
+if __name__ == "__main__":
+    print("This API uses MongoDB. Run: python seed_dummy_data.py")
