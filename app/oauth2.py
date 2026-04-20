@@ -1,15 +1,21 @@
-from datetime import datetime, timedelta
+import os
+
 from fastapi import Depends, status, HTTPException
-from sqlalchemy.orm import Session
 import jwt
-from app import schemas, database, models
+from app import schemas, models
 from fastapi.security import OAuth2PasswordBearer
 from bson import ObjectId
 from app.database import get_db
+from motor.motor_asyncio import AsyncIOMotorDatabase
 
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
-SECRET_KEY = "09d25e094faa6ca2556c818166b7a9563b93f7099f6f0f4caa6cf63b88e8d3e7"
+
+SECRET_KEY = os.getenv("JWT_SECRET_KEY")
+if not SECRET_KEY:
+    raise RuntimeError(
+        "JWT_SECRET_KEY is not set. Add it to your .env file (see .env.example)."
+    )
 ALGORITHM = "HS256"
 # ACCESSTOKEN_EXPIRE_MINUTES = 30
 
@@ -35,7 +41,7 @@ def verify_token(token: str, credentials_exception):
 
 async def get_current_user(
     token: str = Depends(oauth2_scheme),
-    db: Session = Depends(get_db),
+    db: AsyncIOMotorDatabase = Depends(get_db),
 ):
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
