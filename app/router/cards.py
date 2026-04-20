@@ -56,7 +56,7 @@ async def create_bingo_cards(
         created_cards.append(card_dict)
 
     new_card_data = {"cards": created_cards}
-    card_id = helper.generate_unique_code(db)
+    card_id = await helper.generate_unique_code(db)
 
     if card:
         await db[models.BINGO_CARDS_COLLECTION].update_one(
