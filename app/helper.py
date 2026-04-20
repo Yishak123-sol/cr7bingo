@@ -10,9 +10,9 @@ def generate_code(length=6):
     return six_digit_random_number
 
 
-def generate_unique_code(db):
+async def generate_unique_code(db):
     while True:
         code = generate_code()
-        new = db.query(models.BingoCard).filter(models.BingoCard.id == code).first()
-        if not new:
+        existing = await db[models.BINGO_CARDS_COLLECTION].find_one({"_id": code})
+        if not existing:
             return code
